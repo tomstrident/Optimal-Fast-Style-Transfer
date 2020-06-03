@@ -10,7 +10,7 @@ import sys
 from PyQt5 import QtCore
 from PyQt5.QtCore import QSize, Qt
 from PyQt5.QtGui import QImage, QPixmap, QIcon
-from PyQt5.QtWidgets import QHBoxLayout, QSlider, QPushButton, QWidget, QVBoxLayout, QApplication, QGridLayout, QGroupBox, QLabel, QFileDialog 
+from PyQt5.QtWidgets import QComboBox, QHBoxLayout, QSlider, QPushButton, QWidget, QVBoxLayout, QApplication, QGridLayout, QGroupBox, QLabel, QFileDialog 
 
 import os
 import imageio
@@ -27,9 +27,23 @@ class App(QWidget):
     self.initUI()
     
     self.cap = None
+    self.src = "vsttest.mp4"
     
     self.video_output = False
-    
+  
+  def getInputSources(self):
+    index = 0
+    arr = []
+    while True:
+      cap = cv2.VideoCapture(index)
+      if not cap.read()[0]:
+        break
+      else:
+        arr.append(index)
+      cap.release()
+      index += 1
+    return arr
+  
   def addToGrid(self, name, wgts, x, y):
     groupBox = QGroupBox(name)
     vbox = QVBoxLayout()
@@ -38,20 +52,7 @@ class App(QWidget):
     groupBox.setLayout(vbox)
     self.grid.addWidget(groupBox, x, y)
   
-  @QtCore.pyqtSlot()
-  def start_webcam(self, file_name):
-    self.timer = QtCore.QTimer(self, interval=40)
-    self.timer.timeout.connect(self.update_frame)
-    
-    if self.cap is None:
-      #self.cap = cv2.VideoCapture(0)
-      self.cap = cv2.VideoCapture("vsttest.mp4")
-      self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-      self.cap.set(cv2.CAP_PROP_FRAME_WIDTH,  640)
-    self.timer.start()
-    self.frame_counter = 0
-    self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-    
+  def loadTorchFile(self, file_name):
     splits = file_name.split('/')
     
     if len(splits) < 4:
@@ -76,12 +77,25 @@ class App(QWidget):
     
     self.model.loadModelID(n_styles, file_name)
     self.style_id = 0
+  
+  @QtCore.pyqtSlot()
+  def startWebcam(self):
+    self.timer = QtCore.QTimer(self, interval=40)
+    self.timer.timeout.connect(self.updateFrame)
+    
+    #if self.cap is None:
+    self.cap = cv2.VideoCapture(self.src)
+    self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+    self.cap.set(cv2.CAP_PROP_FRAME_WIDTH,  640)
+    self.timer.start()
+    self.frame_counter = 0
+    self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
     
     self.save_snap.setEnabled(False)
     self.snp_btn.setEnabled(True)
     
   @QtCore.pyqtSlot()
-  def update_frame(self):
+  def updateFrame(self):
     ret, image = self.cap.read()
     self.frame_counter += 1
     
@@ -121,7 +135,7 @@ class App(QWidget):
       self.timer.stop()
     else:
       self.video_output = True
-      self.start_webcam()
+      self.startWebcam()
   
   def openFileNameDialog(self):
     options = QFileDialog.Options()
@@ -142,7 +156,8 @@ class App(QWidget):
       self.timer.stop()
       
     self.video_output = True
-    self.start_webcam(fileName)
+    self.loadTorchFile(fileName)
+    self.startWebcam()
   
   def saveFileDialog(self):
     options = QFileDialog.Options()
@@ -174,6 +189,16 @@ class App(QWidget):
     button.setIcon(QIcon(path))
     button.setIconSize(QSize(100, 100))
     return button
+  
+  def selectionChange(self, i):
+    if self.cb.currentText() != "vsttest.mp4":
+      self.src = int(self.cb.currentText())
+    else:
+      self.src = self.cb.currentText()
+    
+    if self.video_output:
+      self.timer.stop()
+      self.startWebcam()
   
   def dummyPrint(self, data):
     #print(data/10)
@@ -267,7 +292,15 @@ class App(QWidget):
     self.exit_btn = QPushButton("Exit", self)
     self.exit_btn.clicked.connect(self.quitApp)
     
-    self.addToGrid("", [self.select_btn, self.snp_btn, self.save_snap, self.exit_btn], 1, 1)
+    #combo box
+    src_list = self.getInputSources()
+    self.cb = QComboBox()
+    self.cb.addItem("vsttest.mp4")
+    for src in src_list:
+      self.cb.addItem(str(src))
+    self.cb.currentIndexChanged.connect(self.selectionChange)
+    
+    self.addToGrid("", [self.select_btn, self.cb, self.snp_btn, self.save_snap, self.exit_btn], 1, 1)
 
     self.setLayout(self.grid)
 
