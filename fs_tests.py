@@ -215,6 +215,5 @@ def main():
   print(method + latex_string)
   '''
 
-
 if __name__ == '__main__':
   main()

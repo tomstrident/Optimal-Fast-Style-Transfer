@@ -7,12 +7,11 @@ class Johnson(FastStyle):
   def __init__(self):
     FastStyle.__init__(self)
     self.method = 'johnson'
-    self.loss_labels = ['total', 'content', 'style', 'tv']
     self.train_dir += self.method + '/'
+    self.loss_labels = ['total', 'content', 'style', 'tv']
     self.loss_letters = ["a", "b", "d"]
 
   def setup_method(self, run_id, emphasis_parameter):
-    alpha, beta, delta = emphasis_parameter
     run_id += self.concat_id(emphasis_parameter)
     
     if run_id[0] == 'm':
@@ -20,7 +19,6 @@ class Johnson(FastStyle):
     else:
       n_styles = 1
       
-    print('n_styles!!!', n_styles)
     self.model = FastStyleNet(3, n_styles).to(self.device)
 
     return run_id
@@ -42,7 +40,7 @@ class Johnson(FastStyle):
     style_loss = 0
     for i, gram_s in enumerate(self.styles[0]):
       gram_img1 = self.gram_matrix(styled_features[i])
-      style_loss += ((gram_img1 - gram_s)**2).mean()#float(weight)*
+      style_loss += ((gram_img1 - gram_s)**2).mean()
       
     style_loss *= beta
     

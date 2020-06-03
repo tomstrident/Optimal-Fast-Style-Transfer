@@ -14,7 +14,6 @@ class Reconet(FastStyle):
     self.loss_letters = ["a", "b", "cf", "co", "d"]
   
   def setup_method(self, run_id, emphasis_parameter):
-    alpha, beta, gamma_f, gamma_o, delta = emphasis_parameter
     run_id += self.concat_id(emphasis_parameter)
     
     if run_id[0] == 'm':
@@ -22,7 +21,6 @@ class Reconet(FastStyle):
     else:
       n_styles = 1
     
-    print('n_styles', n_styles)
     self.model = FastStyleNet(3, n_styles).to(self.device)
     
     return run_id

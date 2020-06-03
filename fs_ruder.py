@@ -19,7 +19,6 @@ class Ruder(FastStyle):
     return True if np.random.random() < p else False
   
   def setup_method(self, run_id, emphasis_parameter):
-    alpha, beta, gamma = emphasis_parameter
     run_id += self.concat_id(emphasis_parameter)
     
     if run_id[0] == 'm':
@@ -28,8 +27,6 @@ class Ruder(FastStyle):
     else:
       pre_style_path = self.train_dir[:5] + "FC2/johnson/sid" + run_id[3] + "_ep3_bs6_lr-3_a0_b1_d-4/epoch_2.pth"
       n_styles = 1
-    
-    print('n_styles', n_styles)
     
     self.model = FastStyleNet(3 + 1 + 3, n_styles).to(self.device)
     self.pre_style_model = FastStyleNet(3, n_styles).to(self.device)

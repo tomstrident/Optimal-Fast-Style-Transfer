@@ -129,8 +129,15 @@ class ConditionalBatchNorm2d(nn.Module):
 
   def forward(self, x, y):
     out = self.bn(x)
-    gamma, beta = self.embed(y).chunk(2)
-    out = gamma.view(-1, self.num_features, 1, 1) * out + beta.view(-1, self.num_features, 1, 1)
+    y1 = torch.floor(y)
+    y2 = torch.ceil(y)
+    gamma1, beta1 = self.embed(y1.long()).chunk(2)
+    gamma2, beta2 = self.embed(y2.long()).chunk(2)
+    alpha2 = y - y1
+    alpha1 = 1 - alpha2
+    gamma = alpha1*gamma1 + alpha2*gamma2
+    beta = alpha1*beta1 + alpha2*beta2
+    out = gamma.view(-1, self.num_features, 1, 1)*out + beta.view(-1, self.num_features, 1, 1)
     return out
 
 class ConvInstRelu(ConvLayer):

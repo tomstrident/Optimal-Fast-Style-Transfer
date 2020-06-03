@@ -14,7 +14,6 @@ class Huang(FastStyle):
     self.loss_letters = ["a", "b", "c", "d"]
     
   def setup_method(self, run_id, emphasis_parameter):
-    alpha, beta, gamma, delta = emphasis_parameter
     run_id += self.concat_id(emphasis_parameter)
     
     if run_id[0] == 'm':
@@ -22,7 +21,6 @@ class Huang(FastStyle):
     else:
       n_styles = 1
     
-    print('n_styles', n_styles)
     self.model = FastStyleNet(3, n_styles).to(self.device)
     
     return run_id

@@ -9,6 +9,8 @@ from torch.utils.data import DataLoader
 from network import Vgg16, Vgg19
 from datasets import FlyingChairs2Dataset, Hollywood2Dataset, COCODataset, SintelDataset
 
+from network import FastStyleNet
+
 import cv2
 import time
 import imageio
@@ -28,6 +30,9 @@ class FastStyle():
     
     self.sid_styles = ['autoportrait', 'edtaonisl', 'composition', 'edtaonisl', 'udnie', 'starry_night']#'candy', 
     
+    style_grid = np.arange(0, len(self.sid_styles), dtype=np.float32)
+    self.style_id_grid = torch.Tensor(style_grid).to(self.device).float()
+    
     if debug and not os.path.exists("debug/"):
       os.mkdir("debug/")
   
@@ -41,16 +46,7 @@ class FastStyle():
     for j, p in enumerate(params):
       for pi in p:
         run_id += "_" + self.loss_letters[j] + ("%d" % np.log10(pi))
-    '''
-    for j, p in enumerate(params):
-      print(type(p))
-      print(len(p))
-      if isinstance(p, list):
-        for pi in p:
-          run_id += "_" + self.loss_letters[j] + ("%d" % np.log10(pi))
-      else:
-        run_id += "_" + self.loss_letters[j] + ("%d" % np.log10(p))
-    '''
+
     return run_id + "/"
   
   def train(self, sid=2, epochs=3, emphasis_parameter=[1e0, 1e1], 
@@ -152,17 +148,13 @@ class FastStyle():
     ft_count = []
     styled_list = []
     
-    debug_path = 'C:/Users/Tom/Documents/Python Scripts/Masters Project/debug/'
+    #debug_path = 'C:/Users/Tom/Documents/Python Scripts/Masters Project/debug/'
 
-    style_grid = np.arange(0, len(self.sid_styles))
-    style_id_grid = torch.LongTensor(style_grid).to(self.device)
+    style_grid = np.arange(0, len(self.sid_styles), dtype=np.float32)
+    style_id_grid = torch.Tensor(style_grid).to(self.device).float()
     style_id = style_id_grid[sid]
 
     for itr, (frame, mask, flow, lt_data) in enumerate(dataloader):
-      
-      #imgs = torch.split(imgs, 3, dim=1)
-      #masks = torch.split(masks, 1, dim=1)
-      #flows = torch.split(flows, 2, dim=1)
 
       if itr > 0:
         flow = flow[0].permute(1, 2, 0).cpu().numpy()
@@ -171,9 +163,6 @@ class FastStyle():
       t_start = time.time()
       torch_output = self.infer_method((frame, mask, warped), style_id)
       t_end = time.time()
-      
-      #print(torch_output.min(), torch_output.max())
-      #blah
       
       ft_count.append(t_end - t_start)
       
@@ -197,7 +186,6 @@ class FastStyle():
         lt_flow, lt_mask = lt_data
         lt_flow = lt_flow[0].permute(1, 2, 0).cpu().numpy()
         lt_mask = lt_mask[0].permute(1, 2, 0).cpu().numpy()
-        #f_idx1 = -1
         f_idx2 = itr-lt_len+1
         #imageio.imwrite(debug_path + '/styled_frame2.png', (styled_list[f_idx1]*255.0).astype(np.uint8))
         #imageio.imwrite(debug_path + '/styled_frame1.png', (styled_list[f_idx2]*255.0).astype(np.uint8))
@@ -218,9 +206,13 @@ class FastStyle():
       if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
-      writer.append_data((styled_frame*255.0).astype(np.uint8))
+      #writer.append_data((styled_frame*255.0).astype(np.uint8))
     
     cv2.destroyAllWindows()
+    
+    for styled_frame in styled_list[::-1]:
+      writer.append_data((styled_frame*255.0).astype(np.uint8))
+    
     writer.close()
     
     ft_count = np.array(ft_count[3:])
@@ -228,7 +220,6 @@ class FastStyle():
     
     avg_ft = ft_count.mean()
     avg_fps = fps_count.mean()
-    
     
     #avg_ft = ft_count.mean()
     #opl_ft = np.percentile(np.sort(ft_count), 1)
@@ -271,7 +262,6 @@ class FastStyle():
       if self.debug:
         imageio.imsave('debug/0_0_style_' + str(i) + '.png', style.cpu().numpy()[0].transpose(1,2,0))
     
-      #print('style', style.min(), style.max())
       style = self.normalize(style)
       styled_featuresR = self.vgg(style)
       style_GM = [self.gram_matrix(f) for f in styled_featuresR]
@@ -293,8 +283,6 @@ class FastStyle():
       self.dataloader = DataLoader(Hollywood2Dataset(dset_path, batch_sz), batch_size=batch_sz)
     elif dset == 'CO2':
       self.dataloader = DataLoader(COCODataset(dset_path, batch_sz), batch_size=batch_sz)
-    elif dset == 'FCH':
-      self.dataloader = DataLoader(CombinedDataset(batch_size=batch_sz), batch_size=batch_sz)
     else:
       assert False, "Invalid dataset specified error!"
     
@@ -309,7 +297,6 @@ class FastStyle():
       param.requires_grad = False
     
     self.styles = self.loadStyles(styles)
-    
     self.adam = []
 
   def prep_adam(self, itr, batch_sz=1):
@@ -346,19 +333,47 @@ class FastStyle():
   def normalize(self, img):
     mean = img.new_tensor(self.VGG16_MEAN).view(-1, 1, 1)
     std = img.new_tensor(self.VGG16_STD).view(-1, 1, 1)
-  
-    #img = img.div_(255.0)
     return (img - mean) / std
 
   def warp_image(self, A, flow):
-    
-    A_m = A#np.moveaxis(A[0], 0, 2)
-    #assert A_m.shape[-3:-1] == flow.shape[-3:-1], "dimension error: input and \
-    #                                             flow size do not match"
     h, w = flow.shape[:2]
     x = (flow[...,0] + np.arange(w)).astype(A.dtype)
     y = (flow[...,1] + np.arange(h)[:,np.newaxis]).astype(A.dtype)
   
-    W_m = cv2.remap(A_m, x, y, cv2.INTER_LINEAR)
+    W_m = cv2.remap(A, x, y, cv2.INTER_LINEAR)
   
     return W_m.reshape(A.shape)
+
+  def styleFrame(self, frame, sid):
+    style_id = torch.from_numpy(np.float32([sid])).to(self.device).float()[0]
+    
+    torch_f = torch.from_numpy(frame).to(self.device).permute(2, 0, 1).float().unsqueeze(0)
+    torch_m = torch.zeros(1, 1, frame.shape[0], frame.shape[1])
+    torch_w = torch_f
+    torch_output = self.infer_method((torch_f, torch_m, torch_w), style_id)
+    
+    torch_output = torch.clamp(torch_output, 0.0, 1.0)
+    styled_frame = torch_output[0].permute(1, 2, 0).detach().cpu().numpy()
+    
+    return styled_frame
+  
+  def loadModel(self, sid, n_styles, epochs, n_epochs, emphasis_parameter, 
+                batchsize=6, learning_rate=1e-3, dset='FC2'):
+    
+    if n_styles > 1:
+      run_id = "msid%d_ep%d_bs%d_lr%d" % (n_styles, epochs, batchsize, np.log10(learning_rate))
+      
+    else:
+      run_id = "sid%d_ep%d_bs%d_lr%d" % (sid, epochs, batchsize, np.log10(learning_rate))
+      
+    emphasis_parameter = self.vectorize_parameters(emphasis_parameter, n_styles)
+    
+    self.train_dir = self.train_dir[:8] + dset + '/' + self.method + '/'
+    run_id = self.setup_method(run_id, emphasis_parameter.T)
+    
+    print(self.train_dir + run_id + 'epoch_' + str(n_epochs) + '.pth')
+    self.loadModelID(self.train_dir + run_id + 'epoch_' + str(n_epochs) + '.pth')
+    
+  def loadModelID(self, n_styles, model_id):
+    self.model = FastStyleNet(3, n_styles).to(self.device)
+    self.model.load_state_dict(torch.load(model_id))
